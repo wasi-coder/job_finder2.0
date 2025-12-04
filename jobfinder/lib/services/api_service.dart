@@ -177,7 +177,7 @@ class ApiService {
       };
 
       final uri = Uri.parse(
-        baseUrl + '/jobs',
+        '$baseUrl/jobs',
       ).replace(queryParameters: queryParams);
       final token = await getToken();
 

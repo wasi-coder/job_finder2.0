@@ -54,7 +54,7 @@ class Job(Base):
     id = Column(Integer, primary_key=True, index=True)
     company_name = Column(String, nullable=False)
     position = Column(String, nullable=False)
-    location = Column(String, nullable=False)
+    location = Column(String, nullable=False) 
     salary_min = Column(Integer)
     salary_max = Column(Integer)
     job_type = Column(String)

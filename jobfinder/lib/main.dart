@@ -22,6 +22,7 @@ class JobFinderApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Job Finder',
+      debugShowCheckedModeBanner: true,
       theme: ThemeData(
         primarySwatch: Colors.green,
         fontFamily: 'Montserrat',

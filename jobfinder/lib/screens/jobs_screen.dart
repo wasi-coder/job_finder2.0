@@ -307,7 +307,7 @@ class _JobPostDialogState extends State<_JobPostDialog> {
               decoration: InputDecoration(labelText: 'Salary Range'),
             ),
             DropdownButtonFormField<String>(
-              value: _jobType,
+              initialValue: _jobType,
               items:
                   ['Full-time', 'Part-time', 'Contract', 'Freelance']
                       .map(
