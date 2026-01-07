@@ -36,7 +36,7 @@ class BottomNavBar extends StatelessWidget {
               Navigator.pushReplacementNamed(context, '/notifications');
               break;
             case 3:
-              Navigator.pushReplacementNamed(context, '/chat');
+              Navigator.pushReplacementNamed(context, '/cv_builder');
               break;
             case 4:
               Navigator.pushReplacementNamed(context, '/profile');
@@ -53,7 +53,10 @@ class BottomNavBar extends StatelessWidget {
             icon: Icon(Icons.notifications),
             label: 'Notifications',
           ),
-          BottomNavigationBarItem(icon: Icon(Icons.chat), label: 'Messages'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.description), // Changed Icon
+            label: 'CV Builder', // Changed Label
+          ),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
         ],
       ),

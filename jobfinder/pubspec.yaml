@@ -10,7 +10,14 @@ dependencies:
   flutter:
     sdk: flutter
   http: ^1.2.1
+  file_picker: ^8.0.0
   shared_preferences: ^2.2.2
+  emoji_picker_flutter: ^3.0.0
+  pdf: ^3.10.0
+  printing: ^5.11.0
+  path_provider: ^2.1.0
+  open_file: ^3.3.2
+  url_launcher: ^6.2.4
 
 dev_dependencies:
   flutter_test:

@@ -12,6 +12,10 @@ class RegisterScreen extends StatefulWidget {
 class _RegisterScreenState extends State<RegisterScreen> {
   // We use a Form key to validate all fields at once
   final _formKey = GlobalKey<FormState>();
+  
+  // New state variables for the feature
+  String _userType = 'employee'; // Default to job seeker
+  final companyNameController = TextEditingController();
 
   final firstNameController = TextEditingController();
   final lastNameController = TextEditingController();
@@ -34,6 +38,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     passwordController.dispose();
     phoneController.dispose();
     setPasswordController.dispose();
+    companyNameController.dispose(); // Don't forget to dispose this
     super.dispose();
   }
 
@@ -89,6 +94,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
         'phone': phoneController.text.trim(),
         'dob': dobController.text.trim(),
         'password': passwordController.text,
+        'user_type': _userType, // Send the selected type
+        if (_userType == 'employer') 
+          'company_name': companyNameController.text.trim(),
       };
 
       final response = await ApiService.register(userData);
@@ -151,7 +159,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                   const SizedBox(height: 32),
                   
-                  // Tabs
+                  // Tabs (Login / Sign Up)
                   Row(
                     children: [
                       _TabButton(title: 'Sign Up', selected: true, onTap: () {}),
@@ -164,6 +172,75 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ],
                   ),
                   const SizedBox(height: 24),
+
+                  // --- NEW SECTION: User Type Selector ---
+                  Container(
+                    padding: EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setState(() => _userType = 'employee'),
+                            child: Container(
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                              decoration: BoxDecoration(
+                                color: _userType == 'employee' ? Color(0xFFD4FF00) : Colors.transparent,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  'Job Seeker',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: _userType == 'employee' ? Colors.black : Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setState(() => _userType = 'employer'),
+                            child: Container(
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                              decoration: BoxDecoration(
+                                color: _userType == 'employer' ? Color(0xFFD4FF00) : Colors.transparent,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  'Employer',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: _userType == 'employer' ? Colors.black : Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // --- NEW SECTION: Company Name Field (Conditional) ---
+                  if (_userType == 'employer') ...[
+                     _CustomTextField(
+                        controller: companyNameController,
+                        hintText: 'Company Name',
+                        prefixIcon: Icons.business,
+                        validator: (value) => _userType == 'employer' && (value == null || value.isEmpty) 
+                            ? 'Company Name Required' 
+                            : null,
+                      ),
+                      const SizedBox(height: 16),
+                  ],
 
                   // Name Fields
                   Row(

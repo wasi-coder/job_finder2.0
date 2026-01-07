@@ -53,7 +53,12 @@ class JobBase(BaseModel):
     requirements: Optional[str] = None
 
 class JobCreate(JobBase):
-    pass
+    # We make this optional here so the Frontend doesn't HAVE to send it.
+    # The backend logic will fill it from the current_user.
+    company_name: Optional[str] = None 
+    salary_min: int
+    salary_max: int
+    category: str
 
 class JobResponse(JobBase):
     id: int
@@ -72,6 +77,20 @@ class JobApplicationResponse(BaseModel):
     job_id: int
     status: str
     applied_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class MessageCreate(BaseModel):
+    application_id: int
+    content: str
+
+class MessageResponse(BaseModel):
+    id: int
+    sender_id: int
+    content: str
+    created_at: datetime
     
     class Config:
         from_attributes = True

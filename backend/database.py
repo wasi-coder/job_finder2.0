@@ -67,6 +67,8 @@ class Job(Base):
     
     applications = relationship("JobApplication", back_populates="job", cascade="all, delete-orphan")
 
+# ... inside database.py ...
+
 class JobApplication(Base):
     __tablename__ = "job_applications"
     
@@ -76,8 +78,34 @@ class JobApplication(Base):
     status = Column(String, default="pending")
     applied_at = Column(DateTime, default=datetime.utcnow)
     
+    # NEW FIELDS
+    cv_file = Column(String, nullable=True)     # Stores the path to the file
+    linkedin_url = Column(String, nullable=True)
+    github_url = Column(String, nullable=True)
+    portfolio_url = Column(String, nullable=True)
+    cover_message = Column(String, nullable=True) # Renamed from 'message' for clarity
+    
     user = relationship("User", back_populates="job_applications")
     job = relationship("Job", back_populates="applications")
+    messages = relationship("Message", back_populates="application", cascade="all, delete-orphan")
+
+# Inside the Message class
+class Message(Base):
+    __tablename__ = "messages"
+    # ... existing fields ...
+    id = Column(Integer, primary_key=True, index=True)
+    application_id = Column(Integer, ForeignKey("job_applications.id"), nullable=False)
+    sender_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    content = Column(String, nullable=True) # Content can be null if just sending a file
+    
+    # NEW FIELDS
+    attachment_url = Column(String, nullable=True)
+    attachment_type = Column(String, nullable=True) # 'image', 'pdf', etc.
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    application = relationship("JobApplication", back_populates="messages")
+    sender = relationship("User")
 
 def init_db():
     Base.metadata.create_all(bind=engine)

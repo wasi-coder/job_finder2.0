@@ -1,17 +1,22 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 import random
 import uvicorn
-from typing import List
+import shutil
+import os
+from typing import List, Optional
 
-from database import get_db, init_db, User, Verification, Job, JobApplication
+# IMPORTS FROM YOUR MODULES
+from database import get_db, init_db, User, Verification, Job, JobApplication, Message
 from schemas import (
     UserCreate, UserLogin, UserResponse, Token,
     VerifyCode, ResendCode,
     JobCreate, JobResponse,
-    JobApplicationCreate, JobApplicationResponse
+    JobApplicationCreate, JobApplicationResponse,
+    MessageCreate, MessageResponse
 )
 from auth import (
     get_password_hash, verify_password, create_access_token,
@@ -20,29 +25,31 @@ from auth import (
 
 app = FastAPI(title="Job Finder API", version="1.0.0")
 
-# CORS Configuration
+# 1. SETUP UPLOADS FOLDER & STATIC MOUNT
+os.makedirs("uploads", exist_ok=True)
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
+# 2. CORS CONFIGURATION
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Change to specific domains in production
+    allow_origins=["*"],  # In production, specify your frontend URL
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Initialize database on startup
 @app.on_event("startup")
 def startup_event():
     init_db()
     print("Database initialized successfully!")
 
-# Utility Functions
+# UTILITIES
 def generate_verification_code() -> str:
     return str(random.randint(100000, 999999))
 
 def send_verification_code(email: str, code: str):
     # TODO: Implement actual email sending (SendGrid, AWS SES, etc.)
     print(f"Sending verification code {code} to {email}")
-    # For now, just print. In production, integrate with email service
 
 # ==================== AUTH ROUTES ====================
 
@@ -73,6 +80,9 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
         email=user_data.email,
         phone=user_data.phone,
         dob=user_data.dob,
+        user_type=user_data.user_type, # Handle user_type
+        company_name=user_data.company_name, # Handle company_name
+        company_description=user_data.company_description,
         password_hash=get_password_hash(user_data.password)
     )
     
@@ -141,7 +151,7 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)):
             detail={
                 "message": "User not verified",
                 "user_id": user.id,
-                "verification_code": code  # Remove in production!
+                "verification_code": code 
             }
         )
     
@@ -156,7 +166,6 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)):
 
 @app.post("/api/verify", response_model=dict)
 def verify_code(verify_data: VerifyCode, db: Session = Depends(get_db)):
-    # Find verification record
     verification = db.query(Verification).filter(
         Verification.user_id == verify_data.user_id,
         Verification.code == verify_data.code,
@@ -169,15 +178,12 @@ def verify_code(verify_data: VerifyCode, db: Session = Depends(get_db)):
             detail="Invalid or expired verification code"
         )
     
-    # Update user as verified
     user = db.query(User).filter(User.id == verify_data.user_id).first()
     user.verified = True
     
-    # Delete verification record
     db.delete(verification)
     db.commit()
     
-    # Create access token
     access_token = create_access_token(data={"sub": str(user.id)})
     
     return {
@@ -192,15 +198,10 @@ def resend_verification_code(resend_data: ResendCode, db: Session = Depends(get_
     user = db.query(User).filter(User.id == resend_data.user_id).first()
     
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     
-    # Delete old verification codes
     db.query(Verification).filter(Verification.user_id == user.id).delete()
     
-    # Generate new code
     code = generate_verification_code()
     verification = Verification(
         user_id=user.id,
@@ -216,7 +217,7 @@ def resend_verification_code(resend_data: ResendCode, db: Session = Depends(get_
     
     return {
         "message": "Verification code resent",
-        "verification_code": code  # Remove in production!
+        "verification_code": code
     }
 
 # ==================== USER ROUTES ====================
@@ -258,10 +259,8 @@ def get_all_jobs(
     
     if category:
         query = query.filter(Job.category == category)
-    
     if job_type:
         query = query.filter(Job.job_type == job_type)
-    
     if search:
         search_filter = f"%{search}%"
         query = query.filter(
@@ -269,18 +268,14 @@ def get_all_jobs(
             (Job.company_name.ilike(search_filter)) |
             (Job.description.ilike(search_filter))
         )
-    
     if min_salary:
         query = query.filter(Job.salary_max >= min_salary)
-    
     if max_salary:
         query = query.filter(Job.salary_min <= max_salary)
-    
     if location:
         location_filter = f"%{location}%"
         query = query.filter(Job.location.ilike(location_filter))
     
-    # Order by most recent first
     query = query.order_by(Job.created_at.desc())
     
     jobs = query.offset(skip).limit(limit).all()
@@ -289,13 +284,8 @@ def get_all_jobs(
 @app.get("/api/jobs/{job_id}", response_model=JobResponse)
 def get_job_by_id(job_id: int, db: Session = Depends(get_db)):
     job = db.query(Job).filter(Job.id == job_id, Job.is_active == True).first()
-    
     if not job:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Job not found"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
     return job
 
 @app.post("/api/jobs", response_model=JobResponse, status_code=status.HTTP_201_CREATED)
@@ -304,15 +294,14 @@ def create_job(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    # Check if user is an employer
     if current_user.user_type != "employer":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only employers can create job listings"
         )
     
-    # Add company name from the employer's profile
     job_dict = job_data.model_dump()
+    # Use the employer's company name if not provided (or override it)
     job_dict["company_name"] = current_user.company_name or job_dict.get("company_name")
     
     new_job = Job(**job_dict)
@@ -323,51 +312,83 @@ def create_job(
     
     return new_job
 
-# ==================== JOB APPLICATION ROUTES ====================
-
-@app.post("/api/applications", response_model=JobApplicationResponse, status_code=status.HTTP_201_CREATED)
-def apply_for_job(
-    application_data: JobApplicationCreate,
+# --- NEW: CLOSE JOB ENDPOINT ---
+@app.put("/api/jobs/{job_id}/close", response_model=JobResponse)
+def close_job(
+    job_id: int,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    # Check if user is an employee
+    if current_user.user_type != "employer":
+        raise HTTPException(status_code=403, detail="Only employers can close jobs")
+    
+    job = db.query(Job).filter(Job.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+        
+    # Check if this employer owns the job
+    if job.company_name != current_user.company_name:
+         raise HTTPException(status_code=403, detail="You do not own this job")
+
+    job.is_active = False # This hides it from the main list
+    db.commit()
+    db.refresh(job)
+    return job
+
+# ==================== JOB APPLICATION ROUTES ====================
+
+@app.post("/api/applications", status_code=status.HTTP_201_CREATED)
+def apply_for_job(
+    job_id: int = Form(...),
+    message: str = Form(None),
+    linkedin: str = Form(None),
+    github: str = Form(None),
+    portfolio: str = Form(None),
+    cv: UploadFile = File(None), # The PDF file
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
     if current_user.user_type != "employee":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only employees can apply for jobs"
-        )
+        raise HTTPException(status_code=403, detail="Only employees can apply")
     
     # Check if job exists
-    job = db.query(Job).filter(Job.id == application_data.job_id).first()
+    job = db.query(Job).filter(Job.id == job_id).first()
     if not job:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Job not found"
-        )
-    
-    # Check if already applied
-    existing_application = db.query(JobApplication).filter(
+        raise HTTPException(status_code=404, detail="Job not found")
+        
+    # Check duplicates
+    existing = db.query(JobApplication).filter(
         JobApplication.user_id == current_user.id,
-        JobApplication.job_id == application_data.job_id
+        JobApplication.job_id == job_id
     ).first()
-    
-    if existing_application:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="You have already applied for this job"
-        )
-    
+    if existing:
+        raise HTTPException(status_code=400, detail="Already applied")
+
+    # Handle File Upload
+    cv_path = None
+    if cv:
+        # Create a unique filename: user_1_job_5_cv.pdf
+        filename = f"user_{current_user.id}_job_{job_id}_{cv.filename}"
+        file_location = f"uploads/{filename}"
+        with open(file_location, "wb") as buffer:
+            shutil.copyfileobj(cv.file, buffer)
+        cv_path = file_location
+
     new_application = JobApplication(
         user_id=current_user.id,
-        job_id=application_data.job_id
+        job_id=job_id,
+        cover_message=message,
+        linkedin_url=linkedin,
+        github_url=github,
+        portfolio_url=portfolio,
+        cv_file=cv_path
     )
     
     db.add(new_application)
     db.commit()
     db.refresh(new_application)
     
-    return new_application
+    return {"message": "Application submitted successfully", "id": new_application.id}
 
 @app.get("/api/applications/me", response_model=List[JobApplicationResponse])
 def get_my_applications(
@@ -377,39 +398,19 @@ def get_my_applications(
     applications = db.query(JobApplication).filter(
         JobApplication.user_id == current_user.id
     ).all()
-    
     return applications
 
 # ==================== JOB METADATA ROUTES ====================
 
 @app.get("/api/job-categories")
 def get_job_categories():
-    return [
-        "Technology",
-        "Healthcare",
-        "Finance",
-        "Education",
-        "Marketing",
-        "Sales",
-        "Customer Service",
-        "Administration",
-        "Engineering",
-        "Design",
-        "Other"
-    ]
+    return ["Technology", "Healthcare", "Finance", "Education", "Marketing", "Sales", "Engineering", "Design", "Other"]
 
 @app.get("/api/job-types")
 def get_job_types():
-    return [
-        "Full-time",
-        "Part-time",
-        "Contract",
-        "Freelance",
-        "Internship",
-        "Remote"
-    ]
+    return ["Full-time", "Part-time", "Contract", "Freelance", "Internship", "Remote"]
 
-# ==================== EMPLOYER ROUTES ====================
+# ==================== EMPLOYER SPECIFIC ROUTES ====================
 
 @app.get("/api/employer/jobs", response_model=List[JobResponse])
 def get_employer_jobs(
@@ -417,10 +418,7 @@ def get_employer_jobs(
     db: Session = Depends(get_db)
 ):
     if current_user.user_type != "employer":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only employers can access this endpoint"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only employers can access this")
     
     jobs = db.query(Job).filter(
         Job.company_name == current_user.company_name
@@ -435,12 +433,8 @@ def get_job_applications(
     db: Session = Depends(get_db)
 ):
     if current_user.user_type != "employer":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only employers can access this endpoint"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only employers can access this")
     
-    # Check if job belongs to the employer
     job = db.query(Job).filter(
         Job.id == job_id,
         Job.company_name == current_user.company_name
@@ -449,7 +443,7 @@ def get_job_applications(
     if not job:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Job not found or you don't have access to it"
+            detail="Job not found or you don't have access"
         )
     
     applications = db.query(JobApplication).filter(
@@ -466,40 +460,130 @@ def update_application_status(
     db: Session = Depends(get_db)
 ):
     if current_user.user_type != "employer":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only employers can update application status"
-        )
-    
-    if status not in ["pending", "accepted", "rejected", "interviewing"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid status value"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only employers can update status")
     
     application = db.query(JobApplication).filter(JobApplication.id == application_id).first()
     if not application:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Application not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
     
-    # Check if job belongs to the employer
     job = db.query(Job).filter(
         Job.id == application.job_id,
         Job.company_name == current_user.company_name
     ).first()
     
     if not job:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have access to this application"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You don't have access")
     
     application.status = status
     db.commit()
     
     return {"message": "Application status updated successfully"}
+
+# ==================== NEW: MESSAGING & EMPLOYER DASHBOARD ROUTES ====================
+
+@app.get("/api/employer/all-applications", response_model=List[JobApplicationResponse])
+def get_all_employer_applications(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Fetch all applications for all jobs posted by the logged-in employer."""
+    if current_user.user_type != "employer":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only employers can access this")
+
+    # Get all jobs posted by this company
+    jobs = db.query(Job).filter(Job.company_name == current_user.company_name).all()
+    job_ids = [job.id for job in jobs]
+
+    if not job_ids:
+        return []
+
+    # Get all applications for these jobs
+    applications = db.query(JobApplication).filter(
+        JobApplication.job_id.in_(job_ids)
+    ).order_by(JobApplication.applied_at.desc()).all()
+
+    return applications
+
+@app.post("/api/messages", response_model=MessageResponse)
+def send_message(
+    application_id: int = Form(...),
+    content: str = Form(None),
+    file: UploadFile = File(None),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    # Verify application exists
+    application = db.query(JobApplication).filter(JobApplication.id == application_id).first()
+    if not application:
+        raise HTTPException(status_code=404, detail="Application not found")
+
+    # Security check: Ensure the user is part of this application (applicant or employer)
+    job = db.query(Job).filter(Job.id == application.job_id).first()
+    
+    is_applicant = (application.user_id == current_user.id)
+    is_employer = (current_user.user_type == 'employer' and 
+                   job.company_name == current_user.company_name)
+    
+    if not (is_applicant or is_employer):
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    # Handle File Upload
+    attachment_path = None
+    attachment_type = None
+    
+    if file:
+        filename = f"chat_{application_id}_{int(datetime.utcnow().timestamp())}_{file.filename}"
+        file_location = f"uploads/{filename}"
+        with open(file_location, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        attachment_path = file_location
+        
+        # Simple type detection
+        if filename.endswith(('.png', '.jpg', '.jpeg')):
+            attachment_type = 'image'
+        elif filename.endswith('.pdf'):
+            attachment_type = 'pdf'
+        else:
+            attachment_type = 'file'
+
+    new_msg = Message(
+        application_id=application_id,
+        sender_id=current_user.id,
+        content=content or "",
+        attachment_url=attachment_path,
+        attachment_type=attachment_type
+    )
+    db.add(new_msg)
+    db.commit()
+    db.refresh(new_msg)
+    return new_msg
+
+@app.get("/api/applications/{application_id}/messages", response_model=List[MessageResponse])
+def get_messages(
+    application_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Retrieve chat history for a specific application."""
+    # Check if application exists
+    application = db.query(JobApplication).filter(JobApplication.id == application_id).first()
+    if not application:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+
+    # Security Check
+    job = db.query(Job).filter(Job.id == application.job_id).first()
+    is_applicant = (application.user_id == current_user.id)
+    is_employer = (current_user.user_type == 'employer' and 
+                   job.company_name == current_user.company_name)
+
+    if not (is_applicant or is_employer):
+         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to view these messages")
+
+    messages = db.query(Message).filter(
+        Message.application_id == application_id
+    ).order_by(Message.created_at.asc()).all()
+    
+    return messages
 
 # ==================== HEALTH CHECK ====================
 
@@ -508,5 +592,4 @@ def health_check():
     return {"status": "healthy", "message": "Job Finder API is running"}
 
 if __name__ == "__main__":
-    
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

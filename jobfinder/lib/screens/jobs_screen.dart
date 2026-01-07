@@ -1,7 +1,10 @@
+
 import 'package:flutter/material.dart';
 import '../widgets/gradient_background.dart';
 import '../widgets/bottom_nav_bar.dart';
 import '../services/api_service.dart';
+import 'post_job_screen.dart';
+import 'apply_job_screen.dart';
 
 class JobsScreen extends StatefulWidget {
   const JobsScreen({super.key});
@@ -62,45 +65,31 @@ class _JobsScreenState extends State<JobsScreen> {
     _loadJobs();
   }
 
-  void _postNewJob() async {
-    final result = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (context) => _JobPostDialog(),
+void _postNewJob() async {
+    // Navigate to full screen page
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => PostJobScreen()),
     );
 
-    if (result != null) {
-      try {
-        await ApiService.postJob(result);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Job posted successfully')));
-        _loadJobs();
-      } catch (e) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to post job: $e')));
-      }
+    // If result is true, refresh jobs
+    if (result == true) {
+      _loadJobs();
     }
   }
 
-  void _applyForJob(dynamic job) async {
-    final message = await showDialog<String>(
-      context: context,
-      builder: (context) => _JobApplicationDialog(),
+  // Update this function
+  void _applyForJob(dynamic job) {
+    // Navigate to full screen page
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ApplyJobScreen(
+          jobId: job['id'], 
+          jobTitle: job['position']
+        ),
+      ),
     );
-
-    if (message != null) {
-      try {
-        await ApiService.applyForJob(job['id'], message);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Application submitted successfully')),
-        );
-      } catch (e) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to apply: $e')));
-      }
-    }
   }
 
   @override
@@ -275,50 +264,98 @@ class _JobPostDialog extends StatefulWidget {
 }
 
 class _JobPostDialogState extends State<_JobPostDialog> {
+  final _formKey = GlobalKey<FormState>(); // Form key for validation
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _locationController = TextEditingController();
-  final _salaryController = TextEditingController();
+  final _minSalaryController = TextEditingController(); // Changed to Min
+  final _maxSalaryController = TextEditingController(); // Changed to Max
+  
   String _jobType = 'Full-time';
+  String _category = 'Technology'; // Default category
+
+  // List of acceptable categories matching your backend
+  final List<String> _categories = [
+    "Technology", "Healthcare", "Finance", "Education", 
+    "Marketing", "Sales", "Engineering", "Design", "Other"
+  ];
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Text('Post a New Job'),
       content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _titleController,
-              decoration: InputDecoration(labelText: 'Job Title'),
-            ),
-            TextField(
-              controller: _descriptionController,
-              decoration: InputDecoration(labelText: 'Description'),
-              maxLines: 3,
-            ),
-            TextField(
-              controller: _locationController,
-              decoration: InputDecoration(labelText: 'Location'),
-            ),
-            TextField(
-              controller: _salaryController,
-              decoration: InputDecoration(labelText: 'Salary Range'),
-            ),
-            DropdownButtonFormField<String>(
-              value: _jobType,
-              items:
-                  ['Full-time', 'Part-time', 'Contract', 'Freelance']
-                      .map(
-                        (type) =>
-                            DropdownMenuItem(value: type, child: Text(type)),
-                      )
-                      .toList(),
-              onChanged: (value) => setState(() => _jobType = value!),
-              decoration: InputDecoration(labelText: 'Job Type'),
-            ),
-          ],
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 1. Job Title
+              TextFormField(
+                controller: _titleController,
+                decoration: InputDecoration(labelText: 'Job Title'),
+                validator: (val) => val!.isEmpty ? 'Required' : null,
+              ),
+              
+              // 2. Description
+              TextFormField(
+                controller: _descriptionController,
+                decoration: InputDecoration(labelText: 'Description'),
+                maxLines: 3,
+                validator: (val) => val!.isEmpty ? 'Required' : null,
+              ),
+
+              // 3. Category Dropdown (Enforces acceptable data)
+              DropdownButtonFormField<String>(
+                value: _category,
+                items: _categories.map((cat) => 
+                  DropdownMenuItem(value: cat, child: Text(cat))
+                ).toList(),
+                onChanged: (val) => setState(() => _category = val!),
+                decoration: InputDecoration(labelText: 'Category'),
+              ),
+
+              // 4. Job Type Dropdown
+              DropdownButtonFormField<String>(
+                value: _jobType,
+                items: ['Full-time', 'Part-time', 'Contract', 'Freelance', 'Remote']
+                    .map((type) => DropdownMenuItem(value: type, child: Text(type)))
+                    .toList(),
+                onChanged: (val) => setState(() => _jobType = val!),
+                decoration: InputDecoration(labelText: 'Job Type'),
+              ),
+
+              // 5. Location
+              TextFormField(
+                controller: _locationController,
+                decoration: InputDecoration(labelText: 'Location'),
+                validator: (val) => val!.isEmpty ? 'Required' : null,
+              ),
+
+              // 6. Salary Row (Numbers Only)
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _minSalaryController,
+                      decoration: InputDecoration(labelText: 'Min Salary'),
+                      keyboardType: TextInputType.number, // Numeric Keyboard
+                      validator: (val) => val!.isEmpty ? 'Required' : null,
+                    ),
+                  ),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _maxSalaryController,
+                      decoration: InputDecoration(labelText: 'Max Salary'),
+                      keyboardType: TextInputType.number, // Numeric Keyboard
+                      validator: (val) => val!.isEmpty ? 'Required' : null,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
       actions: [
@@ -328,17 +365,22 @@ class _JobPostDialogState extends State<_JobPostDialog> {
         ),
         ElevatedButton(
           onPressed: () {
-            if (_titleController.text.isEmpty ||
-                _descriptionController.text.isEmpty) {
-              return;
+            if (_formKey.currentState!.validate()) {
+              // Parse numbers safely
+              int min = int.tryParse(_minSalaryController.text) ?? 0;
+              int max = int.tryParse(_maxSalaryController.text) ?? 0;
+
+              Navigator.pop(context, {
+                'position': _titleController.text,
+                'description': _descriptionController.text,
+                'location': _locationController.text,
+                'salary_min': min, // Sending Integer
+                'salary_max': max, // Sending Integer
+                'job_type': _jobType, // Matching backend field name
+                'category': _category,
+                // 'company_name': null // Backend will auto-fill this now
+              });
             }
-            Navigator.pop(context, {
-              'position': _titleController.text,
-              'description': _descriptionController.text,
-              'location': _locationController.text,
-              'salary_range': _salaryController.text,
-              'type': _jobType,
-            });
           },
           child: Text('Post'),
         ),
@@ -346,7 +388,6 @@ class _JobPostDialogState extends State<_JobPostDialog> {
     );
   }
 }
-
 class _JobApplicationDialog extends StatefulWidget {
   @override
   _JobApplicationDialogState createState() => _JobApplicationDialogState();

@@ -1,8 +1,34 @@
 import 'package:flutter/material.dart';
 import '../widgets/gradient_background.dart';
 
-class OnboardingScreen extends StatelessWidget {
+class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
+
+  @override
+  State<OnboardingScreen> createState() => _OnboardingScreenState();
+}
+
+class _OnboardingScreenState extends State<OnboardingScreen> {
+  final PageController _controller = PageController();
+  int _currentPage = 0;
+
+  final List<Map<String, String>> _pages = [
+    {
+      "title": "Find Jobs Easily",
+      "subtitle": "Search through thousands of jobs in IT, Design, Marketing, and more.",
+      "icon": "search",
+    },
+    {
+      "title": "Apply with One CV",
+      "subtitle": "Create your profile once and apply to multiple companies instantly.",
+      "icon": "file",
+    },
+    {
+      "title": "Chat with Employers",
+      "subtitle": "Direct messaging with hirers to fast-track your interview process.",
+      "icon": "chat",
+    },
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -10,168 +36,101 @@ class OnboardingScreen extends StatelessWidget {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         body: SafeArea(
-          child: SingleChildScrollView(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                minHeight:
-                    MediaQuery.of(context).size.height -
-                    MediaQuery.of(context).padding.top,
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  children: [
-                    // Login/Register buttons at top
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        TextButton(
-                          onPressed:
-                              () => Navigator.pushNamed(context, '/login'),
-                          child: Text(
-                            'Login',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        SizedBox(width: 8),
-                        ElevatedButton(
-                          onPressed:
-                              () => Navigator.pushNamed(context, '/register'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 10,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                          ),
-                          child: Text(
-                            'Sign Up',
-                            style: TextStyle(color: Colors.black87),
-                          ),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: 60),
-                    // Main content
-                    Container(
-                      width: 200,
-                      height: 200,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.white.withOpacity(0.3),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 20,
-                            spreadRadius: 5,
-                          ),
-                        ],
-                      ),
-                      child: Icon(
-                        Icons.work_outline,
-                        size: 80,
-                        color: Colors.white,
-                      ),
-                    ),
-                    SizedBox(height: 40),
-                    Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
+          child: Column(
+            children: [
+              Expanded(
+                child: PageView.builder(
+                  controller: _controller,
+                  onPageChanged: (index) => setState(() => _currentPage = index),
+                  itemCount: _pages.length,
+                  itemBuilder: (context, index) {
+                    return Padding(
+                      padding: const EdgeInsets.all(40.0),
+                      child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          _StatCard(label: '70K+', subtitle: 'Recruiters'),
-                          SizedBox(width: 30),
-                          _StatCard(label: '1K+', subtitle: 'Job Offer'),
+                          Icon(
+                            _getIcon(index),
+                            size: 100,
+                            color: Color(0xFFD4FF00),
+                          ),
+                          SizedBox(height: 40),
+                          Text(
+                            _pages[index]['title']!,
+                            style: TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          SizedBox(height: 16),
+                          Text(
+                            _pages[index]['subtitle']!,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.white70,
+                              height: 1.5,
+                            ),
+                          ),
                         ],
                       ),
+                    );
+                  },
+                ),
+              ),
+              // Dots Indicator
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(
+                  _pages.length,
+                  (index) => Container(
+                    margin: EdgeInsets.symmetric(horizontal: 4),
+                    width: _currentPage == index ? 24 : 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: _currentPage == index ? Color(0xFFD4FF00) : Colors.white24,
+                      borderRadius: BorderRadius.circular(4),
                     ),
-                    SizedBox(height: 40),
-                    Text(
-                      'Everything you need\nin one app',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    SizedBox(height: 16),
-                    Text(
-                      'Create your profile now and be visible to\nthe top recruiters in the world',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 15,
-                        color: Colors.white.withOpacity(0.9),
-                      ),
-                    ),
-                    SizedBox(height: 60),
+                  ),
+                ),
+              ),
+              SizedBox(height: 32),
+              // Buttons
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                child: Column(
+                  children: [
                     ElevatedButton(
-                      onPressed: () {
-                        Navigator.pushNamed(context, '/jobType');
-                      },
+                      onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        minimumSize: Size(200, 56),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(28),
-                        ),
-                        elevation: 8,
+                        backgroundColor: Color(0xFFD4FF00),
+                        minimumSize: Size(double.infinity, 56),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                       ),
-                      child: Text(
-                        'Get Started',
-                        style: TextStyle(fontSize: 16, color: Colors.black87),
-                      ),
+                      child: Text("Login", style: TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.bold)),
                     ),
-                    SizedBox(height: 40),
+                    SizedBox(height: 12),
+                    TextButton(
+                      onPressed: () => Navigator.pushReplacementNamed(context, '/register'),
+                      child: Text("Create an Account", style: TextStyle(color: Colors.white, fontSize: 16)),
+                    ),
                   ],
                 ),
               ),
-            ),
+            ],
           ),
         ),
       ),
     );
   }
-}
 
-class _StatCard extends StatelessWidget {
-  final String label;
-  final String subtitle;
-  const _StatCard({required this.label, required this.subtitle});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-        SizedBox(height: 4),
-        Text(
-          subtitle,
-          style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.8)),
-        ),
-      ],
-    );
+  IconData _getIcon(int index) {
+    switch (index) {
+      case 0: return Icons.search;
+      case 1: return Icons.description_outlined;
+      case 2: return Icons.chat_bubble_outline;
+      default: return Icons.circle;
+    }
   }
 }
